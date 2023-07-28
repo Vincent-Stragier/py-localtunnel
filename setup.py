@@ -24,12 +24,12 @@ setuptools.setup(
         "Natural Language :: English",
         "Operating System :: OS Independent",
     ],
-    keywords='localtunnel,port-forwarding,expose-locahost,localtunnel',
+    keywords="localtunnel,port-forwarding,expose-locahost,localtunnel",
     packages=["py_localtunnel"],
     entry_points={
-        "console_scripts":[
+        "console_scripts": [
             "pylt = py_localtunnel.cli:main",
-            "lt = py_localtunnel.cli:main"
+            "lt = py_localtunnel.cli:main",
         ]
-    }
+    },
 )

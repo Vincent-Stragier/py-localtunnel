@@ -8,6 +8,7 @@ from urllib.parse import urlparse, urlsplit
 LOCAL_TUNNEL_SERVER = "http://localtunnel.me/"
 Debug = True
 
+
 class TunnelConn:
     def __init__(self, remote_host: str, remote_port: int, local_port: int):
         self.remote_host = remote_host
@@ -18,14 +19,18 @@ class TunnelConn:
         self.error_channel = None
 
     def tunnel(self, reply_ch):
-        self.error_channel = [] # clear previous channel's message
+        self.error_channel = []  # clear previous channel's message
         try:
             remote_conn = self.connect_remote()
             local_conn = self.connect_local()
             self.remote_conn = remote_conn
             self.local_conn = local_conn
-            thread_1 = threading.Thread(target=self.copy_data, args=(remote_conn, local_conn))
-            thread_2 = threading.Thread(target=self.copy_data, args=(local_conn, remote_conn))
+            thread_1 = threading.Thread(
+                target=self.copy_data, args=(remote_conn, local_conn)
+            )
+            thread_2 = threading.Thread(
+                target=self.copy_data, args=(local_conn, remote_conn)
+            )
             thread_1.start()
             thread_2.start()
             thread_1.join()
@@ -51,11 +56,11 @@ class TunnelConn:
         proxy = os.getenv("HTTP_PROXY") or os.getenv("http_proxy")
         if proxy:
             proxy_url = urlparse(proxy)
-            remote_conn = socket.create_connection(proxy_url.netloc.split(':'))
+            remote_conn = socket.create_connection(proxy_url.netloc.split(":"))
             connect_request = f"CONNECT {self.remote_host}:{self.remote_port} HTTP/1.1\r\nHost: {self.remote_host}\r\n\r\n"
             remote_conn.sendall(connect_request.encode())
             response = remote_conn.recv(4096)
-            if response.startswith(b'HTTP/1.1 200'):
+            if response.startswith(b"HTTP/1.1 200"):
                 return remote_conn
             else:
                 raise Exception(f"Failed to connect via proxy: {response}")
@@ -63,7 +68,7 @@ class TunnelConn:
             return socket.create_connection(remote_addr)
 
     def connect_local(self):
-        local_addr = ('localhost', self.local_port)
+        local_addr = ("localhost", self.local_port)
         return socket.create_connection(local_addr)
 
     def copy_data(self, source, destination):
@@ -95,19 +100,21 @@ class Tunnel:
         reply_ch = queue.Queue(maxsize=self.assigned_url_info.max_conn_count)
         remote_host = urlsplit(LOCAL_TUNNEL_SERVER).netloc
         for _ in range(self.assigned_url_info.max_conn_count):
-            tunnel_conn = TunnelConn(remote_host, self.assigned_url_info.port, self.local_port)
+            tunnel_conn = TunnelConn(
+                remote_host, self.assigned_url_info.port, self.local_port
+            )
             self.tunnel_conns.append(tunnel_conn)
             thread = threading.Thread(target=tunnel_conn.tunnel, args=(reply_ch,))
             thread.start()
         while reply_ch.qsize() < self.assigned_url_info.max_conn_count:
             cmd = self.cmd_chan.get()
-            if cmd == 'STOP':
+            if cmd == "STOP":
                 break
 
     def stop_tunnel(self) -> None:
         if Debug:
             print(f" Info: Stop tunnel for localPort[{self.local_port}]!")
-        self.cmd_chan.put('STOP')
+        self.cmd_chan.put("STOP")
         for tunnel_conn in self.tunnel_conns:
             tunnel_conn.stop_tunnel()
 
@@ -122,11 +129,11 @@ class Tunnel:
     def create_tunnel(self, local_port: int) -> None:
         self.local_port = local_port
         self.start_tunnel()
-    
+
     def check_local_port(self):
         try:
-            with socket.create_connection(('localhost', self.local_port)) as sock:
+            with socket.create_connection(("localhost", self.local_port)) as sock:
                 pass
         except ConnectionRefusedError:
-            print(' Error: Cannot connect to local port')   
-            os._exit(0)   
+            print(" Error: Cannot connect to local port")
+            os._exit(0)
