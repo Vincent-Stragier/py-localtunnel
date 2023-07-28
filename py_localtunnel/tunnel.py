@@ -1,25 +1,29 @@
 """This module is used to create a tunnel between the local server and the remote server."""
 import os
-import socket
 import queue
+import socket
 import threading
-from py_localtunnel.get_assigned_url import get_assigned_url
-from requests.exceptions import HTTPError
+import traceback
 from urllib.parse import urlparse, urlsplit
 
-DEBUG = True
+from requests.exceptions import HTTPError
+
+from py_localtunnel.get_assigned_url import get_assigned_url
 
 
 class TunnelConn:
     """Tunnel connection."""
 
-    def __init__(self, remote_host: str, remote_port: int, local_port: int):
+    def __init__(
+        self, remote_host: str, remote_port: int, local_port: int, debug: bool = False
+    ):
         self.remote_host = remote_host
         self.remote_port = remote_port
         self.local_port = local_port
         self.remote_conn = None
         self.local_conn = None
         self.error_channel = None
+        self.debug = debug
 
     def tunnel(self, reply_ch: queue.Queue):
         """Create tunnel between local server and remote server.
@@ -31,30 +35,29 @@ class TunnelConn:
         self.error_channel = []
 
         try:
-            remote_conn = self.connect_remote()
-            local_conn = self.connect_local()
-            self.remote_conn = remote_conn
-            self.local_conn = local_conn
+            # Connect to remote server and local server
+            self.remote_conn = self.connect_remote()
+            self.local_conn = self.connect_local()
 
-            # Start two threads to copy data between the two connections
-            thread_1 = threading.Thread(
-                target=self.copy_data, args=(remote_conn, local_conn)
+            # Create two threads to copy data between the two connections
+            receiving_thread = threading.Thread(
+                target=self.copy_data, args=(self.remote_conn, self.local_conn)
             )
-            thread_2 = threading.Thread(
-                target=self.copy_data, args=(local_conn, remote_conn)
+            sending_thread = threading.Thread(
+                target=self.copy_data, args=(self.local_conn, self.remote_conn)
             )
 
-            # Start new Threads
-            thread_1.start()
-            thread_2.start()
+            # Start new threads
+            receiving_thread.start()
+            sending_thread.start()
 
             # Wait for threads to finish
-            thread_1.join()
-            thread_2.join()
+            receiving_thread.join()
+            sending_thread.join()
 
-        except Exception as e:
-            if DEBUG:
-                print(f"Stop copy data! error=[{e}]")
+        except (ConnectionRefusedError,):
+            if self.debug:
+                traceback.print_exc()
 
         finally:
             if self.remote_conn:
@@ -76,7 +79,7 @@ class TunnelConn:
     def connect_remote(self):
         """Connect to remote server."""
         remote_addr = (self.remote_host, self.remote_port)
-        proxy = os.getenv("HTTP_PROXY") or os.getenv("http_proxy")
+        proxy = os.getenv("HTTP_PROXY", os.getenv("http_proxy"))
 
         # If proxy is not set, connect directly to remote server
         if not proxy:
@@ -107,7 +110,6 @@ class TunnelConn:
             source (socket.socket): Source connection.
             destination (socket.socket): Destination connection.
         """
-        e = None  # initialize e to None
         try:
             while True:
                 data = source.recv(4096)
@@ -115,54 +117,55 @@ class TunnelConn:
                     break
                 destination.sendall(data)
 
-        except Exception as ex:
-            if DEBUG:
-                print(f"Stop copy data! error=[{ex}]")
-            e = ex  # assign the exception to e
+        except (OSError,) as exception:
+            if self.debug:
+                traceback.print_exc()
 
-        finally:
-            if self.error_channel is not None and e is not None:
-                self.error_channel.append(e)
+            if self.error_channel is not None:
+                self.error_channel.append(exception)
 
 
 class Tunnel:
     """Tunnel."""
 
-    def __init__(self):
+    def __init__(self, debug: bool = False):
         self.assigned_url_info = None
         self.local_port = None
         self.tunnel_conns = []
         self.cmd_chan = queue.Queue()
+        self.debug = debug
 
     def start_tunnel(self, remote_server: str = "http://localtunnel.me/") -> None:
         """Start tunnel."""
         self.check_local_port()
-        reply_ch = queue.Queue(maxsize=self.assigned_url_info.max_conn_count)
+        max_conn_count = self.assigned_url_info.max_conn_count
+        reply_ch = queue.Queue(maxsize=max_conn_count)
         remote_host = urlsplit(remote_server).netloc
 
-        for _ in range(self.assigned_url_info.max_conn_count):
+        for _ in range(max_conn_count):
+            # print(f'Start tunnel connection {connection_index}.')
             tunnel_conn = TunnelConn(
-                remote_host, self.assigned_url_info.port, self.local_port
+                remote_host, self.assigned_url_info.port, self.local_port, self.debug
             )
             self.tunnel_conns.append(tunnel_conn)
-            thread = threading.Thread(
-                target=tunnel_conn.tunnel, args=(reply_ch,))
+
+            thread = threading.Thread(target=tunnel_conn.tunnel, args=(reply_ch,))
+
             thread.start()
 
-        while reply_ch.qsize() < self.assigned_url_info.max_conn_count:
-            cmd = self.cmd_chan.get()
-            if cmd == "STOP":
+        while reply_ch.qsize() < max_conn_count:
+            if self.cmd_chan.get() == "STOP":
                 break
 
     def stop_tunnel(self) -> None:
         """Stop tunnel."""
-        if DEBUG:
+        if self.debug:
             print(f" Info: Stop tunnel for localPort[{self.local_port}]!")
         self.cmd_chan.put("STOP")
 
         # Wait for all tunnel connections to stop
         for tunnel_conn in self.tunnel_conns:
-            tunnel_conn.stop_tunnel()
+            tunnel_conn.stop_tunnel(self.debug)
 
     def get_url(
         self, assigned_domain: str, remote_server: str = "http://localtunnel.me/"
@@ -177,8 +180,7 @@ class Tunnel:
         """
         if not assigned_domain:
             assigned_domain = "?new"
-        self.assigned_url_info = get_assigned_url(
-            assigned_domain, remote_server)
+        self.assigned_url_info = get_assigned_url(assigned_domain, remote_server)
         self.tunnel_conns = []
         return self.assigned_url_info.url
 
@@ -196,8 +198,8 @@ class Tunnel:
         try:
             with socket.create_connection(("localhost", self.local_port)) as _:
                 pass
+
         except ConnectionRefusedError as exception:
-            # traceback.print_exc()
             raise ConnectionRefusedError(
                 " Error: Cannot connect to local port"
             ) from exception

@@ -1,9 +1,11 @@
 """LocalTunnel module."""
 import sys
+import traceback
+
 from py_localtunnel.tunnel import Tunnel
 
 
-def run_localtunnel(port: int, subdomain: str, remote_server: str):
+def run_localtunnel(port: int, subdomain: str, remote_server: str, debug: bool = False):
     """Run localtunnel.
 
     Args:
@@ -13,7 +15,7 @@ def run_localtunnel(port: int, subdomain: str, remote_server: str):
     """
     try:
         # Create tunnel
-        tunnel = Tunnel()
+        tunnel = Tunnel(debug)
 
         # Get url
         url = tunnel.get_url(subdomain, remote_server)
@@ -28,5 +30,7 @@ def run_localtunnel(port: int, subdomain: str, remote_server: str):
         ) from keyboard_interrupt
 
     finally:
+        if debug:
+            traceback.print_exc()
         tunnel.stop_tunnel()
         sys.exit(0)

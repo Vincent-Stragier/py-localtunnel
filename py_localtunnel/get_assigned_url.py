@@ -1,5 +1,7 @@
 """Helper module to get assigned URL from localtunnel.me server."""
 import json
+import traceback
+
 import requests
 from requests.exceptions import HTTPError
 
@@ -51,7 +53,14 @@ def get_assigned_url(
     if response.status_code != 200:
         raise HTTPError(f"Failed to get assigned URL: {response.text}")
 
-    data = json.loads(response.text)
+    try:
+        data = json.loads(response.text)
+    except json.JSONDecodeError as json_decode_error:
+        traceback.print_exc()
+        raise DataError(
+            f"Failed to get assigned URL: {json_decode_error}"
+        ) from json_decode_error
+
     # Rename id to assigned_id, since id is a reserved keyword
     data["assigned_id"] = data.pop("id")
 

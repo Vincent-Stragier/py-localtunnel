@@ -1,5 +1,7 @@
+"""CLI for py_localtunnel."""
 import argparse
 import sys
+
 from py_localtunnel.lt import run_localtunnel
 
 __version__ = "1.0.2"
@@ -12,6 +14,11 @@ TYPICAL_USAGE = """example:
 
 
 def main(argv=None):
+    """Main function.
+
+    Args:
+        argv (list, optional): List of arguments. Defaults to None.
+    """
     parser = argparse.ArgumentParser(
         prog=PACKAGE_NAME,
         description="localtunnel alternative in python",
@@ -43,6 +50,12 @@ def main(argv=None):
         default="http://localtunnel.me",
         help="Remote server, by default, localtunnel's one (http://localtunnel.me)",
     )
+    parser.add_argument(
+        "-d",
+        "--debug",
+        action="store_true",
+        help="Print debug information",
+    )
 
     # Version
     parser.add_argument(
@@ -63,7 +76,7 @@ def main(argv=None):
         )
         sys.exit(1)
 
-    run_localtunnel(args.port, args.subdomain, args.url)
+    run_localtunnel(args.port, args.subdomain, args.url, args.debug)
 
 
 if __name__ == "__main__":
