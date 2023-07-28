@@ -1,45 +1,69 @@
 import argparse
+import sys
 from py_localtunnel.lt import run_localtunnel
 
 __version__ = "1.0.2"
-package_name = "pylt"
+PACKAGE_NAME = "pylt"
 
-example_uses = """example:
-   pylt port {port_number}
-   pylt port {port_number} -s {your_custom_subdomain}"""
+TYPICAL_USAGE = """example:
+   pylt --port {port_number}
+   pylt -p {port_number} -s {your_custom_subdomain}
+   pylt -p {port_number} -u {your_custom_remote_server}"""
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        prog=package_name,
+        prog=PACKAGE_NAME,
         description="localtunnel alternative in python",
-        epilog=example_uses,
+        epilog=TYPICAL_USAGE,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    subparsers = parser.add_subparsers(dest="command")
 
-    port_parser = subparsers.add_parser("port", help="Internal HTTP server port")
-    port_parser.add_argument("port", type=int, help="Internal HTTP server port")
-    port_parser.add_argument(
-        "-s", "--subdomain", type=str, default="", help="Request this subdomain"
+    # Positional arguments
+    parser.add_argument(
+        "-p",
+        "--port",
+        type=int,
+        help="Internal HTTP server port (0 - 65535)",
+        required=True,
     )
 
+    # Optional arguments
+    parser.add_argument(
+        "-s",
+        "--subdomain",
+        type=str,
+        default="",
+        help="Request this subdomain",
+    )
+    parser.add_argument(
+        "-u",
+        "--url",
+        type=str,
+        default="http://localtunnel.me",
+        help="Remote server, by default, localtunnel's one (http://localtunnel.me)",
+    )
+
+    # Version
     parser.add_argument(
         "-v",
         "--version",
-        action="store_true",
-        dest="version",
-        help="check version of deb",
+        action="version",
+        version=f"{PACKAGE_NAME} version {__version__}",
+        help="Check version of this package",
     )
 
+    # Parse arguments
     args = parser.parse_args(argv)
 
-    if args.command == "port":
-        run_localtunnel(args.port, args.subdomain)
-    elif args.version:
-        return print(__version__)
-    else:
-        parser.print_help()
+    if args.port < 0 or args.port > 65535:
+        print(
+            "Invalid port number, must be between 0 and 65535 inclusive,"
+            f" got: {args.port}"
+        )
+        sys.exit(1)
+
+    run_localtunnel(args.port, args.subdomain, args.url)
 
 
 if __name__ == "__main__":
